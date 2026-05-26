@@ -136,15 +136,41 @@ All HTTP calls are mocked — no API key or network connection required to run t
 
 ## Architecture
 
-```
-User (Streamlit chat)
-        │
-        ▼
-   AgentExecutor  (LangGraph ReAct loop)
-        │
-        ├── quote_tool  ──► GET /v1/quote
-        ├── ohlcv_tool  ──► GET /v1/historical  ──► indicators (SMA/EMA/RSI)
-        └── volume_tool ──► GET /v1/historical
+```mermaid
+flowchart TD
+    User(["👤 User"])
+    UI["Streamlit UI\napp.py"]
+    Agent["LangGraph ReAct Agent\nClaude claude-sonnet-4-6"]
+    Memory["MemorySaver\nper-session thread_id"]
+
+    QT["quote_tool"]
+    OT["ohlcv_tool"]
+    VT["volume_tool"]
+
+    Fetcher["Massive API Fetcher\nfetcher.py"]
+    Indicators["Technical Indicators\nSMA · EMA · RSI"]
+    MassiveAPI[("Massive API")]
+
+    User -->|"question"| UI
+    UI -->|"invoke messages"| Agent
+    Agent <-->|"read / write history"| Memory
+    Agent -->|"tool call"| QT
+    Agent -->|"tool call"| OT
+    Agent -->|"tool call"| VT
+
+    QT --> Fetcher
+    OT --> Fetcher
+    VT --> Fetcher
+
+    Fetcher -->|"HTTP GET /quote"| MassiveAPI
+    Fetcher -->|"HTTP GET /historical"| MassiveAPI
+    MassiveAPI -->|"JSON response"| Fetcher
+
+    OT -->|"OHLCV bars"| Indicators
+    Indicators -->|"SMA / EMA / RSI series"| Agent
+
+    Agent -->|"final answer"| UI
+    UI -->|"answer"| User
 ```
 
 The agent receives the user's question, decides which tool(s) to call, observes the results, and reasons until it has enough information to produce a final answer. Conversation history is preserved per browser session using LangGraph's `MemorySaver`.
